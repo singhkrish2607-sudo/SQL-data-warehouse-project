@@ -392,52 +392,7 @@ Execute the test suites to confirm that data quality rules, integrity checks, an
 \i tests/quality_check_gold.sql
 ```
 
----
 
-## Sample Analytical Queries
-
-Once the Gold layer is active, run business intelligence queries directly against the Star Schema:
-
-### 1. Total Sales and Revenue by Product Category
-```sql
-SELECT
-    p.category,
-    COUNT(f.order_number) AS total_orders,
-    SUM(f.quantity)       AS total_units_sold,
-    SUM(f.sales_amount)   AS total_revenue
-FROM gold.fact_sales f
-JOIN gold.dim_products p ON f.product_key = p.product_key
-GROUP BY p.category
-ORDER BY total_revenue DESC;
-```
-
-### 2. Top 10 Customers by Lifetime Value (LTV)
-```sql
-SELECT
-    c.customer_key,
-    c.first_name || ' ' || c.last_name AS customer_name,
-    c.country,
-    COUNT(DISTINCT f.order_number) AS total_orders,
-    SUM(f.sales_amount)            AS total_spend
-FROM gold.fact_sales f
-JOIN gold.dim_customers c ON f.customer_key = c.customer_key
-GROUP BY c.customer_key, customer_name, c.country
-ORDER BY total_spend DESC
-LIMIT 10;
-```
-
-### 3. Monthly Sales Trends
-```sql
-SELECT
-    DATE_TRUNC('month', order_date)::DATE AS sales_month,
-    COUNT(order_number)                   AS total_orders,
-    SUM(sales_amount)                     AS monthly_revenue
-FROM gold.fact_sales
-GROUP BY sales_month
-ORDER BY sales_month;
-```
-
----
 
 ## Design Standards & Naming Conventions
 
