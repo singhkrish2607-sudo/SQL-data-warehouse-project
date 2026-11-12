@@ -1,192 +1,75 @@
-# Gold Layer Data Catalog
+# Data Catalog for Gold Layer
 
-This document describes the columns available in the three views created
-in the Gold Layer.
+## Overview
+The Gold Layer is the business-level data representation, structured to support analytical and reporting use cases. It consists of **dimension views** and a **fact view** for specific business metrics, built on top of the Silver Layer.
 
-## 1. `gold.dim_customers`
+---
 
-**Description:** Customer dimension view combining CRM customer details
-with ERP birthdate, gender, and country information.
+### 1. **gold.dim_customers**
+- **Purpose:** Stores customer details enriched with demographic and geographic data.
+- **Source tables:** `silver.crm_cust_info`, `silver.erp_cust_az12`, `silver.erp_loc_a101`
+- **Columns:**
 
-**Source tables:** `silver.crm_cust_info`, `silver.erp_cust_az12`,
-`silver.erp_loc_a101`
+| Column Name      | Data Type     | Description                                                                                                        |
+|------------------|---------------|--------------------------------------------------------------------------------------------------------------------|
+| customer_key     | INT           | Surrogate key uniquely identifying each customer record in the dimension view, generated with `ROW_NUMBER()`.      |
+| customer_id      | INT           | Unique numerical identifier assigned to each customer.                                                             |
+| customer_number  | NVARCHAR(50)  | Alphanumeric identifier representing the customer, used to connect CRM and ERP records.                            |
+| first_name       | NVARCHAR(50)  | The customer's first name, as recorded in the system.                                                              |
+| last_name        | NVARCHAR(50)  | The customer's last name or family name.                                                                           |
+| country          | NVARCHAR(50)  | The country associated with the customer (e.g., 'Australia').                                                      |
+| marital_status   | NVARCHAR(50)  | The marital status of the customer (e.g., 'Married', 'Single').                                                    |
+| gender           | NVARCHAR(50)  | The gender of the customer (e.g., 'Male', 'Female', 'n/a'). CRM value is preferred; ERP is used when CRM is 'n/a'. |
+| birthdate        | DATE          | The date of birth of the customer, formatted as YYYY-MM-DD (e.g., 1971-10-06).                                     |
+| create_date      | DATE          | The date the customer record was created in the system.                                                            |
 
-  ------------------------------------------------------------------------------------------------------
-                    No. Column Name         Description      Source / Logic
-  --------------------- ------------------- ---------------- -------------------------------------------
-                      1 `customer_key`      Generated        `ROW_NUMBER() OVER (ORDER BY ci.cst_id)`
-                                            surrogate key    
-                                            for each         
-                                            customer record. 
+---
 
-                      2 `customer_id`       Original         `silver.crm_cust_info.cst_id`
-                                            customer         
-                                            identifier.      
+### 2. **gold.dim_products**
+- **Purpose:** Provides information about the products and their attributes. Only current records (`prd_end_dt IS NULL`) are included.
+- **Source tables:** `silver.crm_prd_info`, `silver.erp_px_cat_g1v2`
+- **Columns:**
 
-                      3 `customer_number`   Customer         `silver.crm_cust_info.cst_key`
-                                            reference number 
-                                            used to connect  
-                                            CRM and ERP      
-                                            records.         
+| Column Name     | Data Type     | Description                                                                                          |
+|-----------------|---------------|------------------------------------------------------------------------------------------------------|
+| product_key     | INT           | Surrogate key uniquely identifying each product record in the product dimension view.                |
+| product_id      | INT           | A unique identifier assigned to the product for internal tracking and referencing.                   |
+| product_number  | NVARCHAR(50)  | A structured alphanumeric code representing the product, often used for categorization or inventory. |
+| product_name    | NVARCHAR(50)  | Descriptive name of the product, including key details such as type, color, and size.                |
+| category_id     | NVARCHAR(50)  | A unique identifier for the product's category, linking to its high-level classification.            |
+| category        | NVARCHAR(50)  | The broader classification of the product (e.g., Bikes, Components) to group related items.          |
+| subcategory     | NVARCHAR(50)  | A more detailed classification of the product within the category, such as product type.             |
+| maintenance     | NVARCHAR(50)  | Indicates whether the product requires maintenance (e.g., 'Yes', 'No').                              |
+| product_cost    | INT           | The cost or base price of the product, measured in monetary units.                                   |
+| product_line    | NVARCHAR(50)  | The specific product line or series to which the product belongs (e.g., Road, Mountain).             |
+| start_date      | DATE          | The date when the product record became effective, formatted as YYYY-MM-DD.                          |
 
-                      4 `first_name`        Customer's first `silver.crm_cust_info.cst_firstname`
-                                            name.            
+---
 
-                      5 `last_name`         Customer's last  `silver.crm_cust_info.cst_lastname`
-                                            name.            
+### 3. **gold.fact_sales**
+- **Purpose:** Stores transactional sales data for analytical purposes.
+- **Source tables:** `silver.crm_sales_details`, `gold.dim_products`, `gold.dim_customers`
+- **Columns:**
 
-                      6 `country`           Country          `silver.erp_loc_a101.cntry`
-                                            associated with  
-                                            the customer.    
+| Column Name   | Data Type     | Description                                                                                          |
+|---------------|---------------|------------------------------------------------------------------------------------------------------|
+| order_number  | NVARCHAR(50)  | A unique alphanumeric identifier for each sales order (e.g., 'SO54496').                             |
+| product_key   | INT           | Surrogate key linking the order to the product dimension view (matched on `product_number`).         |
+| customer_key  | INT           | Surrogate key linking the order to the customer dimension view (matched on `customer_id`).           |
+| order_date    | DATE          | The date when the order was placed.                                                                  |
+| shipping_date | DATE          | The date when the order was shipped to the customer.                                                 |
+| due_date      | DATE          | The date when the order payment was due.                                                             |
+| sales_amount  | INT           | The total monetary value of the sale for the line item, in whole currency units (e.g., 25).          |
+| quantity      | INT           | The number of units of the product ordered for the line item (e.g., 1).                              |
+| price         | INT           | The price per unit of the product for the line item, in whole currency units (e.g., 25).             |
 
-                      7 `marital_status`    Customer's       `silver.crm_cust_info.cst_marital_status`
-                                            marital status.  
+---
 
-                      8 `gender`            Customer's       `ci.cst_gndr`; fallback: `ca.gen`; default:
-                                            gender; CRM      `n/a`
-                                            value is         
-                                            preferred, with  
-                                            ERP used as a    
-                                            fallback when    
-                                            CRM is `n/a`.    
+### Relationships
 
-                      9 `birthdate`         Customer's date  `silver.erp_cust_az12.bdate`
-                                            of birth.        
+| Fact View         | Fact Column    | Dimension View       | Dimension Column |
+|-------------------|----------------|----------------------|------------------|
+| `gold.fact_sales` | `customer_key` | `gold.dim_customers` | `customer_key`   |
+| `gold.fact_sales` | `product_key`  | `gold.dim_products`  | `product_key`    |
 
-                     10 `create_date`       Date the         `silver.crm_cust_info.cst_create_date`
-                                            customer record  
-                                            was created.     
-  ------------------------------------------------------------------------------------------------------
-
-## 2. `gold.dim_products`
-
-**Description:** Product dimension view combining CRM product details
-with ERP category, subcategory, and maintenance information. Only
-records with `prd_end_dt IS NULL` are included.
-
-**Source tables:** `silver.crm_prd_info`, `silver.erp_px_cat_g1v2`
-
-  -----------------------------------------------------------------------------------------------------------------------
-                    No. Column Name        Description       Source / Logic
-  --------------------- ------------------ ----------------- ------------------------------------------------------------
-                      1 `product_key`      Generated         `ROW_NUMBER() OVER (ORDER BY pi.prd_start_dt, pi.prd_key)`
-                                           surrogate key for 
-                                           the product       
-                                           record.           
-
-                      2 `product_id`       Original product  `silver.crm_prd_info.prd_id`
-                                           identifier.       
-
-                      3 `product_number`   Product reference `silver.crm_prd_info.prd_key`
-                                           number.           
-
-                      4 `product_name`     Name of the       `silver.crm_prd_info.prd_nm`
-                                           product.          
-
-                      5 `category_id`      Identifier of the `silver.crm_prd_info.cat_id`
-                                           product category. 
-
-                      6 `category`         Product category  `silver.erp_px_cat_g1v2.cat`
-                                           name.             
-
-                      7 `subcategory`      Product           `silver.erp_px_cat_g1v2.subcat`
-                                           subcategory name. 
-
-                      8 `maintenance`      Maintenance       `silver.erp_px_cat_g1v2.maintenance`
-                                           information for   
-                                           the product       
-                                           category.         
-
-                      9 `product_cost`     Cost recorded for `silver.crm_prd_info.prd_cost`
-                                           the product.      
-
-                     10 `product_line`     Product line      `silver.crm_prd_info.prd_line`
-                                           classification.   
-
-                     11 `start_date`       Start date of the `silver.crm_prd_info.prd_start_dt`
-                                           product record.   
-  -----------------------------------------------------------------------------------------------------------------------
-
-**Filter applied:** `WHERE pi.prd_end_dt IS NULL`
-
-## 3. `gold.fact_sales`
-
-**Description:** Sales fact view containing sales transaction details,
-linked to customer and product dimension keys.
-
-**Source tables:** `silver.crm_sales_details`, `gold.dim_products`,
-`gold.dim_customers`
-
-  --------------------------------------------------------------------------------------------------
-                    No. Column Name       Description      Source / Logic
-  --------------------- ----------------- ---------------- -----------------------------------------
-                      1 `order_number`    Sales order      `silver.crm_sales_details.sls_ord_num`
-                                          number.          
-
-                      2 `product_key`     Surrogate key of `gold.dim_products.product_key`, matched
-                                          the related      using `product_number = sls_prd_key`
-                                          product.         
-
-                      3 `customer_key`    Surrogate key of `gold.dim_customers.customer_key`,
-                                          the related      matched using `customer_id = sls_cust_id`
-                                          customer.        
-
-                      4 `order_date`      Date the sales   `silver.crm_sales_details.sls_order_dt`
-                                          order was        
-                                          placed.          
-
-                      5 `shipping_date`   Date the order   `silver.crm_sales_details.sls_ship_dt`
-                                          was shipped.     
-
-                      6 `due_date`        Due date         `silver.crm_sales_details.sls_due_dt`
-                                          associated with  
-                                          the sales order. 
-
-                      7 `sales_amount`    Sales amount     `silver.crm_sales_details.sls_sales`
-                                          recorded for the 
-                                          transaction.     
-
-                      8 `quantity`        Quantity of      `silver.crm_sales_details.sls_quantity`
-                                          products sold in 
-                                          the transaction. 
-
-                      9 `price`           Price recorded   `silver.crm_sales_details.sls_price`
-                                          for the          
-                                          transaction.     
-  --------------------------------------------------------------------------------------------------
-
-## 4. View Summary
-
-  ------------------------------------------------------------------------------
-  View Name              View Type            Number of Columns Purpose
-  ---------------------- ---------------- --------------------- ----------------
-  `gold.dim_customers`   Dimension                           10 Stores customer
-                                                                profile
-                                                                information.
-
-  `gold.dim_products`    Dimension                           11 Stores current
-                                                                product and
-                                                                category
-                                                                information.
-
-  `gold.fact_sales`      Fact                                 9 Stores sales
-                                                                transaction
-                                                                details and
-                                                                measures.
-  ------------------------------------------------------------------------------
-
-## 5. Relationships
-
-  ------------------------------------------------------------------------------
-  Fact View           Fact Column       Dimension View         Dimension Column
-  ------------------- ----------------- ---------------------- -----------------
-  `gold.fact_sales`   `customer_key`    `gold.dim_customers`   `customer_key`
-
-  `gold.fact_sales`   `product_key`     `gold.dim_products`    `product_key`
-  ------------------------------------------------------------------------------
-
-**Note:** The surrogate keys are generated using `ROW_NUMBER()` in the
-views. Their values are calculated when queried and may change if the
-underlying data or ordering changes. The fact view uses `LEFT JOIN`, so
-its customer or product key may be NULL when no matching dimension
-record exists.
+> **Note:** Surrogate keys are generated with `ROW_NUMBER()` inside the views, so their values are calculated at query time and may change if the underlying data or ordering changes. The fact view uses `LEFT JOIN`, so `customer_key` or `product_key` can be `NULL` when no matching dimension record exists.
