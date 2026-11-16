@@ -94,11 +94,14 @@ LEFT JOIN silver.erp_loc_a101 AS la
 --     - Includes only products where prd_end_dt IS NULL.
 -- =============================================================================
 
-CREATE VIEW gold.dim_products AS
+CREATE OR REPLACE VIEW gold.dim_products AS
+
 SELECT
     -- Generate a surrogate key for product identification
     ROW_NUMBER() OVER (
-        ORDER BY pi.prd_start_dt, pi.prd_key
+        ORDER BY
+            pi.prd_start_dt,
+            pi.prd_key
     ) AS product_key,
 
     -- Product identification and descriptive information
@@ -108,9 +111,11 @@ SELECT
 
     -- Product category information
     pi.cat_id AS category_id,
-    pc.cat AS category,
-    pc.subcat AS subcategory,
-    pc.maintenance AS maintenance,
+
+    -- Handle NULL values and maintain existing column data types
+    CAST(COALESCE(pc.cat, 'n/a') AS VARCHAR(50)) AS category,
+    CAST(COALESCE(pc.subcat, 'n/a') AS VARCHAR(50)) AS subcategory,
+    CAST(COALESCE(pc.maintenance, 'n/a') AS VARCHAR(10)) AS maintenance,
 
     -- Product cost and classification
     pi.prd_cost AS product_cost,
@@ -121,13 +126,10 @@ SELECT
 
 FROM silver.crm_prd_info AS pi
 
--- Retrieve product category and subcategory information
+-- Enrich product information with ERP category details
 LEFT JOIN silver.erp_px_cat_g1v2 AS pc
-    ON pc.id = pi.cat_id
+    ON pc.id = pi.cat_id;
 
--- Include only current product records
-WHERE pi.prd_end_dt IS NULL
-;
 
 
 -- =============================================================================
